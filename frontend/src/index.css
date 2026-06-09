@@ -1,0 +1,113 @@
+:root {
+  /* Core palette — Bloomberg dark meets Abidjan gold */
+  --bg-void:        #080a0f;
+  --bg-deep:        #0d1117;
+  --bg-surface:     #111827;
+  --bg-elevated:    #1a2235;
+  --bg-hover:       #1f2d42;
+
+  --gold:           #d4a843;
+  --gold-bright:    #f0c060;
+  --gold-dim:       #8a6820;
+  --gold-glow:      rgba(212, 168, 67, 0.15);
+
+  --violet:         #7c5cbf;
+  --violet-bright:  #9d7fe0;
+  --violet-glow:    rgba(124, 92, 191, 0.2);
+
+  --cyan:           #00d4ff;
+  --cyan-dim:       rgba(0, 212, 255, 0.1);
+
+  --green-up:       #00ff88;
+  --red-down:       #ff4466;
+
+  --text-primary:   #e8eaf0;
+  --text-secondary: #8892a4;
+  --text-muted:     #4a5568;
+  --text-gold:      #d4a843;
+
+  --border:         rgba(255,255,255,0.06);
+  --border-gold:    rgba(212, 168, 67, 0.3);
+  --border-active:  rgba(212, 168, 67, 0.6);
+
+  /* Typography */
+  --font-display:   'Syne', sans-serif;
+  --font-mono:      'Space Mono', monospace;
+
+  /* Spacing */
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+
+  /* Shadows */
+  --shadow-gold:  0 0 24px rgba(212,168,67,0.12), 0 0 48px rgba(212,168,67,0.06);
+  --shadow-card:  0 4px 24px rgba(0,0,0,0.4);
+  --shadow-deep:  0 8px 48px rgba(0,0,0,0.6);
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+html { font-size: 14px; }
+
+body {
+  background: var(--bg-void);
+  color: var(--text-primary);
+  font-family: var(--font-display);
+  line-height: 1.6;
+  overflow-x: hidden;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Scanline overlay — Bloomberg terminal feel */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 2px,
+    rgba(0,0,0,0.03) 2px,
+    rgba(0,0,0,0.03) 4px
+  );
+  pointer-events: none;
+  z-index: 9999;
+}
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 4px; }
+::-webkit-scrollbar-track { background: var(--bg-deep); }
+::-webkit-scrollbar-thumb { background: var(--gold-dim); border-radius: 2px; }
+
+/* Selection */
+::selection { background: var(--gold-glow); color: var(--gold-bright); }
+
+/* Animations globales */
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+@keyframes pulse-gold {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(212,168,67,0.4); }
+  50%       { box-shadow: 0 0 0 8px rgba(212,168,67,0); }
+}
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0; }
+}
+@keyframes typewriter {
+  from { width: 0; }
+  to   { width: 100%; }
+}
+@keyframes shimmer {
+  0%   { background-position: -200% center; }
+  100% { background-position: 200% center; }
+}
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
