@@ -5,51 +5,28 @@ from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 import time
+import os
 
 from app.config import get_settings
-from app.api.routes import health
 from app.api.routes.health import router as health_router
 from app.api.routes.auth import router as auth_router
 from app.api.routes.query import router as query_router
-
+from app.api.routes.admin import router as admin_router
 
 settings = get_settings()
-
-# ── Rate Limiter ───────────────────────────────────────────────────────────────
 limiter = Limiter(key_func=get_remote_address)
 
-# ── Application ───────────────────────────────────────────────────────────────
 app = FastAPI(
     title=settings.APP_NAME,
     version=settings.APP_VERSION,
-    description="""
-    Solution Text-to-SQL Enterprise.
-    Posez vos questions en langage naturel, obtenez des données et des visuels.
-    """,
-    # En production, désactiver la doc publique :
-    # docs_url=None, redoc_url=None
+    description="Solution Text-to-SQL Enterprise.",
     docs_url="/docs",
     redoc_url="/redoc"
 )
 
-@app.on_event("startup")
-async def startup_event():
-    """Initialise la BDD au démarrage du serveur."""
-    import os
-    from sqlalchemy import create_engine, text
-    
-    database_url = os.getenv("DATABASE_URL", "")
-    if database_url.startswith("postgres://"):
-        database_url = database_url.replace("postgres://", "postgresql://", 1)
-        os.environ["DATABASE_URL"] = database_url
-    
-    print(f"[startup] DATABASE_URL configurée : {database_url[:30]}...")
-
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
-# ── CORS ───────────────────────────────────────────────────────────────────────
-# En production : remplacer ["*"] par les domaines autorisés
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -58,11 +35,26 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+@app.on_event("startup")
+async def startup_event():
+    """Configure DATABASE_URL puis initialise les tables."""
+    # 1. Corrige l'URL PostgreSQL
+    database_url = os.getenv("DATABASE_URL", "")
+    if database_url.startswith("postgres://"):
+        database_url = database_url.replace("postgres://", "postgresql://", 1)
+        os.environ["DATABASE_URL"] = database_url
+    print(f"[startup] DATABASE_URL : {database_url[:30]}...")
 
-# ── Middleware de logging des temps de réponse ─────────────────────────────────
+    # 2. Initialise la table de logs APRÈS avoir configuré l'URL
+    from app.services.query_logger import init_logs_table
+    try:
+        init_logs_table()
+        print("[startup] Table query_logs initialisée")
+    except Exception as e:
+        print(f"[startup] Erreur init logs: {e}")
+
 @app.middleware("http")
 async def add_process_time_header(request: Request, call_next):
-    """Mesure et logue le temps de traitement de chaque requête."""
     start = time.perf_counter()
     response = await call_next(request)
     duration_ms = (time.perf_counter() - start) * 1000
@@ -70,8 +62,6 @@ async def add_process_time_header(request: Request, call_next):
     print(f"[{request.method}] {request.url.path} — {duration_ms:.0f}ms")
     return response
 
-
-# ── Gestion globale des erreurs non catchées ───────────────────────────────────
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
     return JSONResponse(
@@ -84,16 +74,11 @@ async def global_exception_handler(request: Request, exc: Exception):
         }
     )
 
-
-# ── Enregistrement des routes ──────────────────────────────────────────────────
 app.include_router(health_router)
 app.include_router(auth_router)
 app.include_router(query_router)
-# app.include_router(query.router)   ← Module 3
-# app.include_router(schema.router)  ← Module 4
+app.include_router(admin_router)
 
-
-# ── Route racine ──────────────────────────────────────────────────────────────
 @app.get("/", tags=["Root"])
 async def root():
     return {
