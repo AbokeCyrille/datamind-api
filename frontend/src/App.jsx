@@ -33,7 +33,7 @@ export default function App() {
 
   async function handleQuery(question, withVisual) {
     setLoading(true); setError('')
-    setSidebarOpen(false) // ferme sidebar sur mobile après envoi
+    setSidebarOpen(false)
     try {
       const res = await query(question, withVisual)
       const item = { ...res.data, _isNew: true }
@@ -51,19 +51,39 @@ export default function App() {
   const displayed = active !== null ? [history[active]] : history
 
   return (
-    <div style={S.root}>
-      {/* Overlay sidebar mobile */}
-      {sidebarOpen && (
-        <div style={S.overlay} onClick={() => setSidebarOpen(false)} />
+    <div style={{
+      display: 'flex', height: '100dvh',
+      overflow: 'hidden', background: 'var(--bg-void)'
+    }}>
+
+      {/* ── SIDEBAR ── */}
+      {/* Overlay mobile uniquement */}
+      {isMobile && sidebarOpen && (
+        <div
+          onClick={() => setSidebarOpen(false)}
+          style={{
+            position: 'fixed', inset: 0,
+            background: 'rgba(0,0,0,0.7)',
+            zIndex: 99
+          }}
+        />
       )}
 
-      {/* Sidebar */}
+      {/* Sidebar : statique sur desktop, overlay sur mobile */}
       <div style={{
-  ...S.sidebarWrap,
-  position: isMobile ? 'fixed' : 'relative',
-  transform: isMobile && !sidebarOpen ? 'translateX(-100%)' : 'translateX(0)',
-  zIndex: isMobile ? 200 : 'auto',
-}}>
+        width: 240, flexShrink: 0,
+        // Mobile : position fixed, slide in/out
+        ...(isMobile ? {
+          position: 'fixed', top: 0, left: 0,
+          height: '100dvh', zIndex: 100,
+          transform: sidebarOpen ? 'translateX(0)' : 'translateX(-100%)',
+          transition: 'transform 0.25s ease'
+        } : {
+          // Desktop : fait partie du flux normal
+          position: 'relative',
+          height: '100dvh'
+        })
+      }}>
         <Sidebar
           history={history}
           activeIndex={active}
@@ -72,49 +92,118 @@ export default function App() {
         />
       </div>
 
-      {/* Main */}
+      {/* ── MAIN ── */}
       <div style={{
-  ...S.main,
-  marginLeft: isMobile ? 0 : 240
-}}>
+        flex: 1, display: 'flex',
+        flexDirection: 'column',
+        overflow: 'hidden',
+        minWidth: 0  // important pour flex
+      }}>
+
         {/* Topbar */}
-        <header style={S.topbar}>
+        <header style={{
+          height: 52, flexShrink: 0,
+          background: 'var(--bg-deep)',
+          borderBottom: '1px solid var(--border)',
+          display: 'flex', alignItems: 'center',
+          justifyContent: 'space-between',
+          padding: '0 20px', gap: 12
+        }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            {/* Hamburger mobile */}
-            <button
-  style={{ ...S.hamburger, display: isMobile ? 'flex' : 'none' }}
-  onClick={() => setSidebarOpen(s => !s)}
->
-  <span style={S.hamburgerLine} />
-  <span style={S.hamburgerLine} />
-  <span style={S.hamburgerLine} />
-</button>
+            {/* Hamburger — mobile seulement */}
+            {isMobile && (
+              <button
+                onClick={() => setSidebarOpen(s => !s)}
+                style={{
+                  background: 'none', border: 'none',
+                  cursor: 'pointer', padding: 4,
+                  display: 'flex', flexDirection: 'column', gap: 4
+                }}
+              >
+                {[0,1,2].map(i => (
+                  <span key={i} style={{
+                    display: 'block', width: 20, height: 2,
+                    background: 'var(--gold)', borderRadius: 1
+                  }} />
+                ))}
+              </button>
+            )}
             <div>
-              <div style={S.topbarTitle}>DataMind</div>
-              <div style={S.topbarSub}>
-                {history.length} requête{history.length !== 1 ? 's' : ''}
+              <div style={{
+                fontWeight: 800, fontSize: 15,
+                color: 'var(--text-primary)',
+                fontFamily: 'var(--font-display)'
+              }}>
+                {isMobile ? 'DataMind' : 'Analyse de données'}
+              </div>
+              <div style={{
+                fontFamily: 'var(--font-mono)', fontSize: 9,
+                color: 'var(--text-muted)', marginTop: 1
+              }}>
+                {history.length} requête{history.length !== 1 ? 's' : ''} · Session active
               </div>
             </div>
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <div style={S.liveTag}>
-              <span style={S.liveDot} />
-              <span style={{ display: 'none', ...S.liveText }}>LIVE</span>
+            {/* Badge LIVE */}
+            <div style={{
+              display: 'flex', alignItems: 'center', gap: 5,
+              background: 'rgba(0,255,136,0.08)',
+              border: '1px solid rgba(0,255,136,0.2)',
+              borderRadius: 20, padding: '3px 10px',
+              fontFamily: 'var(--font-mono)', fontSize: 9,
+              color: '#00ff88', letterSpacing: '0.1em'
+            }}>
+              <span style={{
+                width: 6, height: 6, borderRadius: '50%',
+                background: '#00ff88',
+                animation: 'pulse-gold 2s infinite'
+              }} />
+              {!isMobile && 'LIVE'}
             </div>
+
+            {/* Bouton Admin */}
             {localStorage.getItem('dm_role') === 'admin' && (
-              <button style={S.adminBtn} onClick={() => setShowAdmin(s => !s)}>
-                {showAdmin ? '←' : '⚙'}
+              <button
+                onClick={() => setShowAdmin(s => !s)}
+                style={{
+                  background: showAdmin
+                    ? 'rgba(212,168,67,0.2)'
+                    : 'rgba(212,168,67,0.08)',
+                  border: '1px solid var(--border-gold)',
+                  color: 'var(--gold)', borderRadius: 8,
+                  padding: '5px 12px', cursor: 'pointer',
+                  fontFamily: 'var(--font-mono)', fontSize: 11
+                }}
+              >
+                {showAdmin ? '← Retour' : '⚙ Admin'}
               </button>
             )}
-            <button style={S.logoutBtn} onClick={logout}>
-              ⏻
+
+            {/* Déconnexion */}
+            <button
+              onClick={logout}
+              style={{
+                background: 'transparent',
+                border: '1px solid var(--border)',
+                color: 'var(--text-muted)', borderRadius: 8,
+                padding: '5px 12px', cursor: 'pointer',
+                fontFamily: 'var(--font-mono)', fontSize: 11
+              }}
+            >
+              {isMobile ? '⏻' : 'Déconnexion'}
             </button>
           </div>
         </header>
 
-        {/* Corps */}
-        <div style={S.body}>
+        {/* Corps scrollable */}
+        <div style={{
+          flex: 1, overflowY: 'auto',
+          padding: isMobile ? '16px 12px' : '24px 32px',
+          maxWidth: 900, width: '100%',
+          margin: '0 auto', boxSizing: 'border-box'
+        }}>
           {showAdmin ? (
             <AdminDashboard onBack={() => setShowAdmin(false)} />
           ) : (
@@ -123,46 +212,103 @@ export default function App() {
               <ChatInput onSubmit={handleQuery} loading={loading} />
 
               {loading && (
-                <div style={S.loadingCard}>
-                  <div style={S.loadingDots}>
+                <div style={{
+                  display: 'flex', alignItems: 'center', gap: 12,
+                  background: 'var(--bg-surface)',
+                  border: '1px solid var(--border-gold)',
+                  borderRadius: 10, padding: '12px 16px', marginBottom: 16
+                }}>
+                  <div style={{ display: 'flex', gap: 5 }}>
                     {[0,1,2].map(i => (
-                      <span key={i} style={{ ...S.dot, animationDelay: `${i * 0.15}s` }} />
+                      <span key={i} style={{
+                        width: 7, height: 7, borderRadius: '50%',
+                        background: 'var(--gold)',
+                        animation: 'pulse-gold 1.2s ease-in-out infinite',
+                        animationDelay: `${i * 0.15}s`
+                      }} />
                     ))}
                   </div>
-                  <div style={S.loadingText}>
+                  <span style={{
+                    fontFamily: 'var(--font-mono)', fontSize: 11,
+                    color: 'var(--text-secondary)'
+                  }}>
                     <span style={{ color: 'var(--gold)' }}>DataMind</span>
-                    {' '}analyse...
-                  </div>
+                    {' '}analyse votre question...
+                  </span>
                 </div>
               )}
 
               {error && (
-                <div style={S.errorCard}>
+                <div style={{
+                  background: 'rgba(255,68,102,0.06)',
+                  border: '1px solid rgba(255,68,102,0.25)',
+                  borderRadius: 8, padding: '10px 14px',
+                  fontFamily: 'var(--font-mono)', fontSize: 12,
+                  color: '#ff8899', marginBottom: 12
+                }}>
                   <span style={{ color: '#ff4466', marginRight: 8 }}>⚠</span>
                   {error}
                 </div>
               )}
 
               {!loading && history.length === 0 && (
-                <div style={S.empty}>
-                  <div style={S.emptyGrid} />
-                  <svg style={S.emptyIcon} viewBox="0 0 80 80" fill="none">
-                    <rect x="1" y="1" width="78" height="78" rx="16" stroke="rgba(212,168,67,0.3)" strokeWidth="1"/>
-                    <path d="M20 40 L30 28 L45 52 L55 40" stroke="#d4a843" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" fill="none"/>
+                <div style={{
+                  textAlign: 'center',
+                  padding: isMobile ? '40px 16px' : '60px 40px',
+                  position: 'relative', overflow: 'hidden'
+                }}>
+                  <div style={{
+                    position: 'absolute', inset: 0,
+                    backgroundImage: `
+                      linear-gradient(rgba(212,168,67,0.03) 1px, transparent 1px),
+                      linear-gradient(90deg, rgba(212,168,67,0.03) 1px, transparent 1px)
+                    `,
+                    backgroundSize: '32px 32px', pointerEvents: 'none'
+                  }} />
+                  <svg style={{ width: 64, height: 64, margin: '0 auto 20px', display: 'block' }}
+                    viewBox="0 0 80 80" fill="none">
+                    <rect x="1" y="1" width="78" height="78" rx="16"
+                      stroke="rgba(212,168,67,0.3)" strokeWidth="1"/>
+                    <path d="M20 40 L30 28 L45 52 L55 40"
+                      stroke="#d4a843" strokeWidth="2"
+                      strokeLinecap="round" strokeLinejoin="round" fill="none"/>
                     <circle cx="20" cy="40" r="3" fill="#d4a843"/>
                     <circle cx="55" cy="40" r="3" fill="#d4a843"/>
                   </svg>
-                  <h2 style={S.emptyTitle}>Prêt pour l'analyse</h2>
-                  <p style={S.emptySub}>
-                    Posez une question en français
+                  <h2 style={{
+                    fontFamily: 'var(--font-display)', fontWeight: 800,
+                    fontSize: isMobile ? 18 : 22,
+                    color: 'var(--text-primary)', marginBottom: 10
+                  }}>
+                    Prêt pour l'analyse
+                  </h2>
+                  <p style={{
+                    color: 'var(--text-muted)', fontSize: 13,
+                    margin: '0 auto 24px', fontFamily: 'var(--font-mono)',
+                    maxWidth: 400
+                  }}>
+                    Posez une question en français — DataMind génère le SQL
+                    et présente les résultats.
                   </p>
-                  <div style={S.emptyExamples}>
+                  <div style={{
+                    display: 'flex', gap: 8,
+                    justifyContent: 'center', flexWrap: 'wrap'
+                  }}>
                     {[
                       'Ventes par région en janvier',
                       'Top 5 vendeurs',
                       'Évolution mensuelle',
                     ].map((ex, i) => (
-                      <div key={i} style={S.exTag} onClick={() => handleQuery(ex, true)}>
+                      <div key={i}
+                        onClick={() => handleQuery(ex, true)}
+                        style={{
+                          background: 'var(--gold-glow)',
+                          border: '1px solid var(--border-gold)',
+                          color: 'var(--gold)', borderRadius: 20,
+                          padding: '6px 14px', fontSize: 12,
+                          cursor: 'pointer', fontFamily: 'var(--font-mono)'
+                        }}
+                      >
                         → {ex}
                       </div>
                     ))}
@@ -183,165 +329,4 @@ export default function App() {
       </div>
     </div>
   )
-}
-
-const S = {
-  root: {
-    display: 'flex', height: '100dvh',
-    overflow: 'hidden', position: 'relative'
-  },
-
-  // Sidebar — slide-in sur mobile
-  sidebarWrap: {
-    position: 'fixed', top: 0, left: 0,
-    height: '100dvh', zIndex: 200,
-    transition: 'transform 0.25s ease',
-    // Sur desktop (> 768px) : toujours visible
-    '@media (min-width: 768px)': { transform: 'translateX(0) !important' }
-  },
-
-  overlay: {
-    position: 'fixed', inset: 0,
-    background: 'rgba(0,0,0,0.6)',
-    zIndex: 199, backdropFilter: 'blur(2px)'
-  },
-
-  main: {
-    flex: 1, display: 'flex',
-    flexDirection: 'column', overflow: 'hidden',
-    // Sur desktop, laisse de la place pour la sidebar
-    marginLeft: 0,
-    width: '100%'
-  },
-
-  topbar: {
-    height: 52, flexShrink: 0,
-    background: 'var(--bg-deep)',
-    borderBottom: '1px solid var(--border)',
-    display: 'flex', alignItems: 'center',
-    justifyContent: 'space-between',
-    padding: '0 16px'
-  },
-
-  hamburger: {
-    background: 'none', border: 'none',
-    cursor: 'pointer', padding: 6,
-    display: 'flex', flexDirection: 'column',
-    gap: 4, flexShrink: 0
-  },
-  hamburgerLine: {
-    display: 'block', width: 20, height: 2,
-    background: 'var(--gold)', borderRadius: 1
-  },
-
-  topbarTitle: {
-    fontWeight: 800, fontSize: 14,
-    color: 'var(--text-primary)',
-    fontFamily: 'var(--font-display)'
-  },
-  topbarSub: {
-    fontFamily: 'var(--font-mono)', fontSize: 9,
-    color: 'var(--text-muted)', marginTop: 1
-  },
-
-  liveTag: {
-    display: 'flex', alignItems: 'center', gap: 4,
-    background: 'rgba(0,255,136,0.08)',
-    border: '1px solid rgba(0,255,136,0.2)',
-    borderRadius: 20, padding: '3px 8px',
-    fontFamily: 'var(--font-mono)', fontSize: 9,
-    color: '#00ff88'
-  },
-  liveText: { letterSpacing: '0.1em' },
-  liveDot: {
-    width: 6, height: 6, borderRadius: '50%',
-    background: '#00ff88', animation: 'pulse-gold 2s infinite',
-    flexShrink: 0
-  },
-
-  adminBtn: {
-    background: 'rgba(212,168,67,0.1)',
-    border: '1px solid var(--border-gold)',
-    color: 'var(--gold)', borderRadius: 8,
-    padding: '5px 10px', cursor: 'pointer',
-    fontFamily: 'var(--font-mono)', fontSize: 13
-  },
-
-  logoutBtn: {
-    background: 'transparent',
-    border: '1px solid var(--border)',
-    color: 'var(--text-muted)', borderRadius: 8,
-    padding: '5px 10px', cursor: 'pointer',
-    fontSize: 14
-  },
-
-  body: {
-    flex: 1, overflowY: 'auto',
-    padding: '20px 16px',
-    width: '100%', maxWidth: 860,
-    margin: '0 auto', boxSizing: 'border-box'
-  },
-
-  loadingCard: {
-    display: 'flex', alignItems: 'center', gap: 12,
-    background: 'var(--bg-surface)',
-    border: '1px solid var(--border-gold)',
-    borderRadius: 10, padding: '12px 16px',
-    marginBottom: 16
-  },
-  loadingDots: { display: 'flex', gap: 5 },
-  dot: {
-    width: 7, height: 7, borderRadius: '50%',
-    background: 'var(--gold)',
-    animation: 'pulse-gold 1.2s ease-in-out infinite'
-  },
-  loadingText: {
-    fontFamily: 'var(--font-mono)', fontSize: 11,
-    color: 'var(--text-secondary)'
-  },
-
-  errorCard: {
-    background: 'rgba(255,68,102,0.06)',
-    border: '1px solid rgba(255,68,102,0.25)',
-    borderRadius: 8, padding: '10px 14px',
-    fontFamily: 'var(--font-mono)', fontSize: 12,
-    color: '#ff8899', marginBottom: 12
-  },
-
-  empty: {
-    textAlign: 'center', padding: '40px 20px',
-    position: 'relative', overflow: 'hidden'
-  },
-  emptyGrid: {
-    position: 'absolute', inset: 0,
-    backgroundImage: `
-      linear-gradient(rgba(212,168,67,0.03) 1px, transparent 1px),
-      linear-gradient(90deg, rgba(212,168,67,0.03) 1px, transparent 1px)
-    `,
-    backgroundSize: '32px 32px', pointerEvents: 'none'
-  },
-  emptyIcon: {
-    width: 64, height: 64,
-    margin: '0 auto 20px', display: 'block'
-  },
-  emptyTitle: {
-    fontFamily: 'var(--font-display)', fontWeight: 800,
-    fontSize: 20, color: 'var(--text-primary)',
-    marginBottom: 10
-  },
-  emptySub: {
-    color: 'var(--text-muted)', fontSize: 13,
-    margin: '0 auto 20px', fontFamily: 'var(--font-mono)'
-  },
-  emptyExamples: {
-    display: 'flex', gap: 8,
-    justifyContent: 'center', flexWrap: 'wrap'
-  },
-  exTag: {
-    background: 'var(--gold-glow)',
-    border: '1px solid var(--border-gold)',
-    color: 'var(--gold)', borderRadius: 20,
-    padding: '5px 12px', fontSize: 11,
-    cursor: 'pointer', fontFamily: 'var(--font-mono)'
-  }
 }
