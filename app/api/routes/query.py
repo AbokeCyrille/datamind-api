@@ -2,10 +2,10 @@ from fastapi import APIRouter, Depends, HTTPException
 from app.models.request import QueryRequest
 from app.models.response import QueryResponse
 from app.api.dependencies import get_current_user
-from app.services.schema_reader import get_db_schema
-from app.services.llm import generate_sql, generate_natural_answer
+from app.services.schema_reader import get_smart_schema
+from app.services.llm import generate_sql_and_config, generate_natural_answer
 from app.services.sql_executor import execute_query
-from app.services.visualizer import generate_visual
+from app.services.visualizer import generate_visual_from_config
 import time
 
 router = APIRouter(prefix="/query", tags=["Requêtes"])
@@ -14,28 +14,39 @@ router = APIRouter(prefix="/query", tags=["Requêtes"])
 @router.post("", response_model=QueryResponse)
 async def query(
     request: QueryRequest,
-    current_user: dict = Depends(get_current_user)  # ← protégé par JWT
+    current_user: dict = Depends(get_current_user)
 ):
-    """
-    Endpoint principal : question → SQL → données → réponse.
-    """
     start = time.perf_counter()
 
     try:
-        # Étape 1 : lire le schéma BDD
-        schema = get_db_schema()
+        # Étape 1 : schéma intelligent
+        schema = get_smart_schema(request.question)
 
-        # Étape 2 & 3 : construire le prompt + appeler Claude
-        sql = generate_sql(request.question, schema)
+        # Étape 2 : Claude génère SQL + chart config en un seul appel
+        config = generate_sql_and_config(request.question, schema)
+        sql         = config["sql"]
+        chart_type  = config.get("chart_type", "bar")
+        x_col       = config.get("x_col")
+        y_col       = config.get("y_col")
+        color_col   = config.get("color_col")
 
-        # Étape 4 : exécuter le SQL
+        # Étape 3 : exécution SQL
         data = execute_query(sql)
 
-        # Étape 5 : formuler la réponse naturelle
+        # Étape 4 : réponse naturelle
         answer = generate_natural_answer(request.question, sql, data)
-        # Étape 6 : générer la visualisation
-        if request.generate_visual and data:
-            visual = generate_visual(data, request.question)
+
+        # Étape 5 : graphique avec la config de Claude
+        visual = None
+        if request.generate_visual and data and chart_type != "none":
+            visual = generate_visual_from_config(
+                data=data,
+                question=request.question,
+                chart_type=chart_type,
+                x_col=x_col,
+                y_col=y_col,
+                color_col=color_col
+            )
 
         execution_time = (time.perf_counter() - start) * 1000
 

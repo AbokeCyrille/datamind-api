@@ -108,11 +108,12 @@ def analyze_dataframe(df: pd.DataFrame) -> dict:
 COLORS = ["#d4a843", "#7c5cbf", "#00d4ff", "#00ff88",
           "#ff4466", "#f0c060", "#9d7fe0", "#00b4d8"]
 
+
 BASE_LAYOUT = dict(
     paper_bgcolor="rgba(0,0,0,0)",
     plot_bgcolor="rgba(0,0,0,0)",
     font=dict(family="Space Mono, monospace", color="#8892a4", size=11),
-    margin=dict(l=50, r=30, t=60, b=50),
+    margin=dict(l=60, r=30, t=60, b=60),
     legend=dict(
         bgcolor="rgba(17,24,39,0.8)",
         bordercolor="rgba(212,168,67,0.2)",
@@ -127,9 +128,12 @@ BASE_LAYOUT = dict(
     yaxis=dict(
         gridcolor="rgba(255,255,255,0.04)",
         zerolinecolor="rgba(255,255,255,0.08)",
-        linecolor="rgba(255,255,255,0.08)"
+        linecolor="rgba(255,255,255,0.08)",
+        rangemode="tozero",      # ← Force l'axe Y à partir de 0
+        automargin=True          # ← Évite que les barres soient coupées
     ),
     colorway=COLORS,
+    autosize=True,
 )
 
 def apply_theme(fig, title: str = "") -> dict:
@@ -422,3 +426,166 @@ def generate_visual(data: list[dict[str, Any]], question: str) -> dict | None:
     except Exception as e:
         print(f"[visualizer] Erreur: {e}")
         return None
+
+
+def generate_visual_from_config(
+    data: list[dict[str, Any]],
+    question: str,
+    chart_type: str,
+    x_col: str = None,
+    y_col: str = None,
+    color_col: str = None
+) -> dict | None:
+    """
+    Génère un graphique en utilisant la config décidée par Claude.
+    C'est la fonction principale — elle remplace generate_visual().
+    Claude sait exactement quelles colonnes utiliser.
+    """
+    if not data:
+        return None
+
+    try:
+        df   = pd.DataFrame(data)
+        info = analyze_dataframe(df)
+
+        # Valide que les colonnes existent dans le dataframe
+        cols = df.columns.tolist()
+        if x_col and x_col not in cols:
+            x_col = None
+        if y_col and y_col not in cols:
+            y_col = None
+        if color_col and color_col not in cols:
+            color_col = None
+
+        # Fallback sur l'analyse automatique si colonnes manquantes
+        if not x_col:
+            x_col = (info["date_cols"][0] if info["date_cols"] else
+                     info["text_cols"][0] if info["text_cols"] else cols[0])
+        if not y_col:
+            y_col = info["num_cols"][0] if info["num_cols"] else cols[-1]
+
+        # Dispatch selon le type décidé par Claude
+        if chart_type == "pie":
+            fig = go.Figure(go.Pie(
+                labels=df[x_col], values=df[y_col], hole=0,
+                marker=dict(colors=COLORS, line=dict(color="#080a0f", width=2)),
+                hovertemplate="%{label}<br>%{value:,.0f}<br>%{percent}<extra></extra>"
+            ))
+
+        elif chart_type == "donut":
+            fig = go.Figure(go.Pie(
+                labels=df[x_col], values=df[y_col], hole=0.45,
+                marker=dict(colors=COLORS, line=dict(color="#080a0f", width=2)),
+                hovertemplate="%{label}<br>%{value:,.0f}<br>%{percent}<extra></extra>"
+            ))
+
+        elif chart_type == "line":
+            fig = go.Figure(go.Scatter(
+                x=df[x_col], y=df[y_col],
+                mode="lines+markers",
+                line=dict(color=COLORS[0], width=2),
+                marker=dict(size=7),
+                hovertemplate=f"{y_col}: %{{y:,.0f}}<extra></extra>"
+            ))
+
+        elif chart_type == "area":
+            fig = go.Figure(go.Scatter(
+                x=df[x_col], y=df[y_col],
+                mode="lines", fill="tozeroy",
+                line=dict(color=COLORS[0], width=2),
+                fillcolor="rgba(212,168,67,0.15)"
+            ))
+
+        elif chart_type == "bar_h":
+            fig = px.bar(
+                df, x=y_col, y=x_col, orientation="h",
+                color=color_col if color_col else None,
+                color_discrete_sequence=COLORS
+            )
+
+        elif chart_type == "scatter":
+            fig = px.scatter(
+                df, x=x_col, y=y_col,
+                color=color_col if color_col else None,
+                color_discrete_sequence=COLORS
+            )
+
+        elif chart_type == "bubble":
+            size_col = color_col or y_col
+            fig = px.scatter(
+                df, x=x_col, y=y_col,
+                size=size_col if size_col in cols else None,
+                color=color_col if color_col else None,
+                color_discrete_sequence=COLORS,
+                size_max=60
+            )
+
+        elif chart_type == "funnel":
+            df_s = df.sort_values(y_col, ascending=False)
+            fig = go.Figure(go.Funnel(
+                y=df_s[x_col], x=df_s[y_col],
+                marker=dict(color=COLORS[:len(df_s)]),
+                textinfo="value+percent initial"
+            ))
+
+        elif chart_type == "treemap":
+            path = [x_col] + ([color_col] if color_col and color_col in cols else [])
+            fig = px.treemap(
+                df, path=path, values=y_col,
+                color=y_col,
+                color_continuous_scale=["#1a2235", "#d4a843"]
+            )
+
+        elif chart_type == "waterfall":
+            values = df[y_col].tolist()
+            fig = go.Figure(go.Waterfall(
+                x=df[x_col].tolist(), y=values,
+                orientation="v",
+                increasing=dict(marker_color=COLORS[3]),
+                decreasing=dict(marker_color=COLORS[4]),
+                totals=dict(marker_color=COLORS[0])
+            ))
+
+        elif chart_type == "heatmap":
+            if color_col and color_col in cols:
+                try:
+                    pivot = df.pivot_table(
+                        index=x_col, columns=color_col,
+                        values=y_col, aggfunc="sum"
+                    ).fillna(0)
+                    fig = go.Figure(go.Heatmap(
+                        z=pivot.values,
+                        x=list(pivot.columns),
+                        y=list(pivot.index),
+                        colorscale=[[0,"#0d1117"],[0.5,"#7c5cbf"],[1,"#d4a843"]]
+                    ))
+                except Exception:
+                    fig = px.bar(df, x=x_col, y=y_col,
+                                 color_discrete_sequence=COLORS)
+            else:
+                fig = px.bar(df, x=x_col, y=y_col,
+                             color_discrete_sequence=COLORS)
+
+        elif chart_type in ("grouped", "stacked"):
+            barmode = "group" if chart_type == "grouped" else "stack"
+            fig = px.bar(
+                df, x=x_col, y=y_col,
+                color=color_col if color_col else None,
+                barmode=barmode,
+                color_discrete_sequence=COLORS
+            )
+
+        else:
+            # Défaut : bar chart vertical
+            fig = px.bar(
+                df, x=x_col, y=y_col,
+                color=color_col if color_col else None,
+                color_discrete_sequence=COLORS
+            )
+
+        return apply_theme(fig, question)
+
+    except Exception as e:
+        print(f"[visualizer_config] Erreur: {e}")
+        # Fallback sur l'ancienne méthode
+        return generate_visual(data, question)
