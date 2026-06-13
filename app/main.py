@@ -4,6 +4,7 @@ from fastapi.responses import JSONResponse
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
+from app.services.semantic_cache import init_cache_table
 import time
 import os
 
@@ -38,6 +39,7 @@ app.add_middleware(
 @app.on_event("startup")
 async def startup_event():
     """Configure DATABASE_URL puis initialise les tables."""
+    
     # 1. Corrige l'URL PostgreSQL
     database_url = os.getenv("DATABASE_URL", "")
     if database_url.startswith("postgres://"):
@@ -45,7 +47,7 @@ async def startup_event():
         os.environ["DATABASE_URL"] = database_url
     print(f"[startup] DATABASE_URL : {database_url[:30]}...")
 
-    # 2. Initialise la table de logs APRÈS avoir configuré l'URL
+    # 2. Initialise la table de logs
     from app.services.query_logger import init_logs_table
     try:
         init_logs_table()
@@ -53,6 +55,13 @@ async def startup_event():
     except Exception as e:
         print(f"[startup] Erreur init logs: {e}")
 
+    # 3. Initialise le cache sémantique
+    try:
+        init_cache_table()
+        print("[startup] Table query_cache initialisée")
+    except Exception as e:
+        print(f"[startup] Erreur init cache: {e}")
+        
 @app.middleware("http")
 async def add_process_time_header(request: Request, call_next):
     start = time.perf_counter()
