@@ -5,15 +5,18 @@ import ChatInput from './components/ChatInput'
 import ResultCard from './components/ResultCard'
 import AdminDashboard from './components/AdminDashboard'
 import { query } from './api/client'
+import { useIsMobile } from './hooks/useIsMobile'
 
 export default function App() {
-  const [authed,    setAuthed]    = useState(!!localStorage.getItem('dm_token'))
-  const [history,   setHistory]   = useState([])
-  const [active,    setActive]    = useState(null)
-  const [loading,   setLoading]   = useState(false)
-  const [error,     setError]     = useState('')
-  const [showAdmin, setShowAdmin] = useState(false)
+  const [authed,      setAuthed]      = useState(!!localStorage.getItem('dm_token'))
+  const [history,     setHistory]     = useState([])
+  const [active,      setActive]      = useState(null)
+  const [loading,     setLoading]     = useState(false)
+  const [error,       setError]       = useState('')
+  const [showAdmin,   setShowAdmin]   = useState(false)
+  const [sidebarOpen, setSidebarOpen] = useState(false)
   const topRef = useRef(null)
+  const isMobile = useIsMobile()
 
   function logout() {
     localStorage.removeItem('dm_token')
@@ -30,13 +33,11 @@ export default function App() {
 
   async function handleQuery(question, withVisual) {
     setLoading(true); setError('')
+    setSidebarOpen(false) // ferme sidebar sur mobile après envoi
     try {
       const res = await query(question, withVisual)
       const item = { ...res.data, _isNew: true }
-      setHistory(prev => {
-        setActive(0)
-        return [item, ...prev]
-      })
+      setHistory(prev => { setActive(0); return [item, ...prev] })
       topRef.current?.scrollIntoView({ behavior: 'smooth' })
     } catch (err) {
       setError(err.response?.data?.detail || 'Erreur inattendue.')
@@ -51,34 +52,63 @@ export default function App() {
 
   return (
     <div style={S.root}>
-      <Sidebar
-        history={history}
-        activeIndex={active}
-        onSelect={i => setActive(i)}
-        onClear={() => { setHistory([]); setActive(null) }}
-      />
+      {/* Overlay sidebar mobile */}
+      {sidebarOpen && (
+        <div style={S.overlay} onClick={() => setSidebarOpen(false)} />
+      )}
 
-      <div style={S.main}>
+      {/* Sidebar */}
+      <div style={{
+  ...S.sidebarWrap,
+  position: isMobile ? 'fixed' : 'relative',
+  transform: isMobile && !sidebarOpen ? 'translateX(-100%)' : 'translateX(0)',
+  zIndex: isMobile ? 200 : 'auto',
+}}>
+        <Sidebar
+          history={history}
+          activeIndex={active}
+          onSelect={i => { setActive(i); setSidebarOpen(false) }}
+          onClear={() => { setHistory([]); setActive(null) }}
+        />
+      </div>
+
+      {/* Main */}
+      <div style={{
+  ...S.main,
+  marginLeft: isMobile ? 0 : 240
+}}>
         {/* Topbar */}
         <header style={S.topbar}>
-          <div style={S.topbarLeft}>
-            <div style={S.topbarTitle}>Analyse de données</div>
-            <div style={S.topbarSub}>
-              {history.length} requête{history.length !== 1 ? 's' : ''} · Session active
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            {/* Hamburger mobile */}
+            <button
+  style={{ ...S.hamburger, display: isMobile ? 'flex' : 'none' }}
+  onClick={() => setSidebarOpen(s => !s)}
+>
+  <span style={S.hamburgerLine} />
+  <span style={S.hamburgerLine} />
+  <span style={S.hamburgerLine} />
+</button>
+            <div>
+              <div style={S.topbarTitle}>DataMind</div>
+              <div style={S.topbarSub}>
+                {history.length} requête{history.length !== 1 ? 's' : ''}
+              </div>
             </div>
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <div style={S.liveTag}>
               <span style={S.liveDot} />
-              LIVE
+              <span style={{ display: 'none', ...S.liveText }}>LIVE</span>
             </div>
             {localStorage.getItem('dm_role') === 'admin' && (
               <button style={S.adminBtn} onClick={() => setShowAdmin(s => !s)}>
-                {showAdmin ? '← Requêtes' : '⚙ Admin'}
+                {showAdmin ? '←' : '⚙'}
               </button>
             )}
             <button style={S.logoutBtn} onClick={logout}>
-              Déconnexion
+              ⏻
             </button>
           </div>
         </header>
@@ -101,14 +131,14 @@ export default function App() {
                   </div>
                   <div style={S.loadingText}>
                     <span style={{ color: 'var(--gold)' }}>DataMind</span>
-                    {' '}analyse votre question · génération SQL · interrogation BDD...
+                    {' '}analyse...
                   </div>
                 </div>
               )}
 
               {error && (
                 <div style={S.errorCard}>
-                  <span style={{ color: '#ff4466', marginRight: 10 }}>⚠</span>
+                  <span style={{ color: '#ff4466', marginRight: 8 }}>⚠</span>
                   {error}
                 </div>
               )}
@@ -121,15 +151,17 @@ export default function App() {
                     <path d="M20 40 L30 28 L45 52 L55 40" stroke="#d4a843" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" fill="none"/>
                     <circle cx="20" cy="40" r="3" fill="#d4a843"/>
                     <circle cx="55" cy="40" r="3" fill="#d4a843"/>
-                    <circle cx="40" cy="22" r="2" fill="rgba(212,168,67,0.4)"/>
                   </svg>
                   <h2 style={S.emptyTitle}>Prêt pour l'analyse</h2>
                   <p style={S.emptySub}>
-                    Posez une question en français — DataMind génère le SQL,
-                    interroge votre base de données et vous présente les résultats.
+                    Posez une question en français
                   </p>
                   <div style={S.emptyExamples}>
-                    {['Ventes par région en janvier', 'Top 5 vendeurs ce trimestre', 'Évolution mensuelle des ventes'].map((ex, i) => (
+                    {[
+                      'Ventes par région en janvier',
+                      'Top 5 vendeurs',
+                      'Évolution mensuelle',
+                    ].map((ex, i) => (
                       <div key={i} style={S.exTag} onClick={() => handleQuery(ex, true)}>
                         → {ex}
                       </div>
@@ -154,70 +186,162 @@ export default function App() {
 }
 
 const S = {
-  root: { display: 'flex', height: '100vh', overflow: 'hidden' },
-  main: { flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' },
+  root: {
+    display: 'flex', height: '100dvh',
+    overflow: 'hidden', position: 'relative'
+  },
+
+  // Sidebar — slide-in sur mobile
+  sidebarWrap: {
+    position: 'fixed', top: 0, left: 0,
+    height: '100dvh', zIndex: 200,
+    transition: 'transform 0.25s ease',
+    // Sur desktop (> 768px) : toujours visible
+    '@media (min-width: 768px)': { transform: 'translateX(0) !important' }
+  },
+
+  overlay: {
+    position: 'fixed', inset: 0,
+    background: 'rgba(0,0,0,0.6)',
+    zIndex: 199, backdropFilter: 'blur(2px)'
+  },
+
+  main: {
+    flex: 1, display: 'flex',
+    flexDirection: 'column', overflow: 'hidden',
+    // Sur desktop, laisse de la place pour la sidebar
+    marginLeft: 0,
+    width: '100%'
+  },
+
   topbar: {
-    height: 56, flexShrink: 0,
+    height: 52, flexShrink: 0,
     background: 'var(--bg-deep)',
     borderBottom: '1px solid var(--border)',
     display: 'flex', alignItems: 'center',
     justifyContent: 'space-between',
-    padding: '0 28px'
+    padding: '0 16px'
   },
-  topbarLeft: {},
-  topbarTitle: { fontWeight: 700, fontSize: 15, color: 'var(--text-primary)' },
-  topbarSub: { fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-muted)', marginTop: 1 },
-  liveTag: {
-    display: 'flex', alignItems: 'center', gap: 6,
-    background: 'rgba(0,255,136,0.08)', border: '1px solid rgba(0,255,136,0.2)',
-    borderRadius: 20, padding: '3px 10px',
+
+  hamburger: {
+    background: 'none', border: 'none',
+    cursor: 'pointer', padding: 6,
+    display: 'flex', flexDirection: 'column',
+    gap: 4, flexShrink: 0
+  },
+  hamburgerLine: {
+    display: 'block', width: 20, height: 2,
+    background: 'var(--gold)', borderRadius: 1
+  },
+
+  topbarTitle: {
+    fontWeight: 800, fontSize: 14,
+    color: 'var(--text-primary)',
+    fontFamily: 'var(--font-display)'
+  },
+  topbarSub: {
     fontFamily: 'var(--font-mono)', fontSize: 9,
-    color: '#00ff88', letterSpacing: '0.1em'
+    color: 'var(--text-muted)', marginTop: 1
   },
-  liveDot: { width: 6, height: 6, borderRadius: '50%', background: '#00ff88', animation: 'pulse-gold 2s infinite' },
+
+  liveTag: {
+    display: 'flex', alignItems: 'center', gap: 4,
+    background: 'rgba(0,255,136,0.08)',
+    border: '1px solid rgba(0,255,136,0.2)',
+    borderRadius: 20, padding: '3px 8px',
+    fontFamily: 'var(--font-mono)', fontSize: 9,
+    color: '#00ff88'
+  },
+  liveText: { letterSpacing: '0.1em' },
+  liveDot: {
+    width: 6, height: 6, borderRadius: '50%',
+    background: '#00ff88', animation: 'pulse-gold 2s infinite',
+    flexShrink: 0
+  },
+
   adminBtn: {
-    background: 'rgba(212,168,67,0.1)', border: '1px solid var(--border-gold)',
-    color: 'var(--gold)', borderRadius: 8, padding: '5px 14px',
-    cursor: 'pointer', fontFamily: 'var(--font-mono)', fontSize: 11
+    background: 'rgba(212,168,67,0.1)',
+    border: '1px solid var(--border-gold)',
+    color: 'var(--gold)', borderRadius: 8,
+    padding: '5px 10px', cursor: 'pointer',
+    fontFamily: 'var(--font-mono)', fontSize: 13
   },
+
   logoutBtn: {
-    background: 'transparent', border: '1px solid var(--border)',
-    color: 'var(--text-muted)', borderRadius: 'var(--radius-md)',
-    padding: '5px 14px', cursor: 'pointer',
-    fontFamily: 'var(--font-mono)', fontSize: 11, letterSpacing: '0.06em'
+    background: 'transparent',
+    border: '1px solid var(--border)',
+    color: 'var(--text-muted)', borderRadius: 8,
+    padding: '5px 10px', cursor: 'pointer',
+    fontSize: 14
   },
+
   body: {
-    flex: 1, overflowY: 'auto', padding: '28px 32px',
-    maxWidth: 900, width: '100%', margin: '0 auto', boxSizing: 'border-box'
+    flex: 1, overflowY: 'auto',
+    padding: '20px 16px',
+    width: '100%', maxWidth: 860,
+    margin: '0 auto', boxSizing: 'border-box'
   },
+
   loadingCard: {
-    display: 'flex', alignItems: 'center', gap: 16,
-    background: 'var(--bg-surface)', border: '1px solid var(--border-gold)',
-    borderRadius: 'var(--radius-lg)', padding: '16px 20px',
-    marginBottom: 16, animation: 'fadeIn 0.3s ease'
+    display: 'flex', alignItems: 'center', gap: 12,
+    background: 'var(--bg-surface)',
+    border: '1px solid var(--border-gold)',
+    borderRadius: 10, padding: '12px 16px',
+    marginBottom: 16
   },
-  loadingDots: { display: 'flex', gap: 6 },
-  dot: { width: 8, height: 8, borderRadius: '50%', background: 'var(--gold)', animation: 'pulse-gold 1.2s ease-in-out infinite' },
-  loadingText: { fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-secondary)' },
+  loadingDots: { display: 'flex', gap: 5 },
+  dot: {
+    width: 7, height: 7, borderRadius: '50%',
+    background: 'var(--gold)',
+    animation: 'pulse-gold 1.2s ease-in-out infinite'
+  },
+  loadingText: {
+    fontFamily: 'var(--font-mono)', fontSize: 11,
+    color: 'var(--text-secondary)'
+  },
+
   errorCard: {
-    background: 'rgba(255,68,102,0.06)', border: '1px solid rgba(255,68,102,0.25)',
-    borderRadius: 'var(--radius-md)', padding: '12px 16px',
-    fontFamily: 'var(--font-mono)', fontSize: 12, color: '#ff8899', marginBottom: 16
+    background: 'rgba(255,68,102,0.06)',
+    border: '1px solid rgba(255,68,102,0.25)',
+    borderRadius: 8, padding: '10px 14px',
+    fontFamily: 'var(--font-mono)', fontSize: 12,
+    color: '#ff8899', marginBottom: 12
   },
-  empty: { textAlign: 'center', padding: '60px 40px', position: 'relative', overflow: 'hidden' },
+
+  empty: {
+    textAlign: 'center', padding: '40px 20px',
+    position: 'relative', overflow: 'hidden'
+  },
   emptyGrid: {
     position: 'absolute', inset: 0,
-    backgroundImage: `linear-gradient(rgba(212,168,67,0.03) 1px, transparent 1px), linear-gradient(90deg, rgba(212,168,67,0.03) 1px, transparent 1px)`,
+    backgroundImage: `
+      linear-gradient(rgba(212,168,67,0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(212,168,67,0.03) 1px, transparent 1px)
+    `,
     backgroundSize: '32px 32px', pointerEvents: 'none'
   },
-  emptyIcon: { width: 80, height: 80, margin: '0 auto 24px', display: 'block', position: 'relative' },
-  emptyTitle: { fontFamily: 'var(--font-display)', fontWeight: 800, fontSize: 24, color: 'var(--text-primary)', marginBottom: 12, position: 'relative' },
-  emptySub: { color: 'var(--text-muted)', fontSize: 13, maxWidth: 460, margin: '0 auto 28px', fontFamily: 'var(--font-mono)', lineHeight: 1.7, position: 'relative' },
-  emptyExamples: { display: 'flex', gap: 10, justifyContent: 'center', flexWrap: 'wrap' },
+  emptyIcon: {
+    width: 64, height: 64,
+    margin: '0 auto 20px', display: 'block'
+  },
+  emptyTitle: {
+    fontFamily: 'var(--font-display)', fontWeight: 800,
+    fontSize: 20, color: 'var(--text-primary)',
+    marginBottom: 10
+  },
+  emptySub: {
+    color: 'var(--text-muted)', fontSize: 13,
+    margin: '0 auto 20px', fontFamily: 'var(--font-mono)'
+  },
+  emptyExamples: {
+    display: 'flex', gap: 8,
+    justifyContent: 'center', flexWrap: 'wrap'
+  },
   exTag: {
-    background: 'var(--gold-glow)', border: '1px solid var(--border-gold)',
-    color: 'var(--gold)', borderRadius: 20, padding: '6px 16px',
-    fontSize: 12, cursor: 'pointer', fontFamily: 'var(--font-mono)',
-    transition: 'background 0.15s', position: 'relative'
+    background: 'var(--gold-glow)',
+    border: '1px solid var(--border-gold)',
+    color: 'var(--gold)', borderRadius: 20,
+    padding: '5px 12px', fontSize: 11,
+    cursor: 'pointer', fontFamily: 'var(--font-mono)'
   }
 }
