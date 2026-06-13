@@ -13,6 +13,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copie le code source
 COPY app/ ./app/
 
+COPY init_db.py .
 
 # Variable d'environnement pour dire à Python de ne pas bufferiser les logs
 ENV PYTHONUNBUFFERED=1
