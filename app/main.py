@@ -11,7 +11,7 @@ from app.api.routes import health
 from app.api.routes.health import router as health_router
 from app.api.routes.auth import router as auth_router
 from app.api.routes.query import router as query_router
-# Module 3 : on ajoutera query et schema ici
+
 
 settings = get_settings()
 
@@ -31,6 +31,19 @@ app = FastAPI(
     docs_url="/docs",
     redoc_url="/redoc"
 )
+
+@app.on_event("startup")
+async def startup_event():
+    """Initialise la BDD au démarrage du serveur."""
+    import os
+    from sqlalchemy import create_engine, text
+    
+    database_url = os.getenv("DATABASE_URL", "")
+    if database_url.startswith("postgres://"):
+        database_url = database_url.replace("postgres://", "postgresql://", 1)
+        os.environ["DATABASE_URL"] = database_url
+    
+    print(f"[startup] DATABASE_URL configurée : {database_url[:30]}...")
 
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
