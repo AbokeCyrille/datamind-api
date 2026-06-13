@@ -1,87 +1,97 @@
 from sqlalchemy import text
 from app.services.query_logger import get_engine
-from datetime import datetime, timedelta
+import os
 
 
 def get_dashboard_metrics(days: int = 7) -> dict:
-    """
-    Calcule les KPIs pour le dashboard admin.
-    Utilisé par les ingénieurs Google/Meta pour surveiller leurs LLMs.
-    """
     engine = get_engine()
-    
+    url = os.getenv("DATABASE_URL", "")
+    is_postgres = "postgresql" in url or "postgres" in url
+
+    # Filtre de date compatible SQLite et PostgreSQL
+    if is_postgres:
+        date_filter = f"timestamp > NOW() - INTERVAL '{days} days'"
+    else:
+        date_filter = f"timestamp > datetime('now', '-{days} days')"
+
     with engine.connect() as conn:
-        # Total requêtes
+
         total = conn.execute(text(
-            "SELECT COUNT(*) FROM query_logs WHERE timestamp > NOW() - INTERVAL ':days days'",
-        ).bindparams(days=days)).scalar() or 0
+            f"SELECT COUNT(*) FROM query_logs WHERE {date_filter}"
+        )).scalar() or 0
 
-        # Taux de succès
         success = conn.execute(text(
-            "SELECT COUNT(*) FROM query_logs WHERE success = true AND timestamp > NOW() - INTERVAL ':days days'"
-        ).bindparams(days=days)).scalar() or 0
+            f"SELECT COUNT(*) FROM query_logs WHERE success = 1 AND {date_filter}"
+        )).scalar() or 0
 
-        # Latence moyenne
         avg_latency = conn.execute(text(
-            "SELECT AVG(execution_time_ms) FROM query_logs WHERE success = true AND timestamp > NOW() - INTERVAL ':days days'"
-        ).bindparams(days=days)).scalar() or 0
+            f"SELECT AVG(execution_time_ms) FROM query_logs WHERE success = 1 AND {date_filter}"
+        )).scalar() or 0
 
-        # Coût total
         total_cost = conn.execute(text(
-            "SELECT SUM(cost_usd) FROM query_logs WHERE timestamp > NOW() - INTERVAL ':days days'"
-        ).bindparams(days=days)).scalar() or 0
+            f"SELECT SUM(cost_usd) FROM query_logs WHERE {date_filter}"
+        )).scalar() or 0
 
-        # Top questions
-        top_questions = conn.execute(text("""
+        top_questions = conn.execute(text(f"""
             SELECT question, COUNT(*) as count
             FROM query_logs
-            WHERE timestamp > NOW() - INTERVAL ':days days'
+            WHERE {date_filter}
             GROUP BY question
             ORDER BY count DESC
             LIMIT 5
-        """).bindparams(days=days)).fetchall()
+        """)).fetchall()
 
-        # Évolution quotidienne
-        daily = conn.execute(text("""
-            SELECT 
-                DATE(timestamp) as day,
-                COUNT(*) as total,
-                SUM(CASE WHEN success THEN 1 ELSE 0 END) as success_count,
-                AVG(execution_time_ms) as avg_latency,
-                SUM(cost_usd) as daily_cost
-            FROM query_logs
-            WHERE timestamp > NOW() - INTERVAL ':days days'
-            GROUP BY DATE(timestamp)
-            ORDER BY day
-        """).bindparams(days=days)).fetchall()
+        if is_postgres:
+            daily_sql = f"""
+                SELECT 
+                    DATE(timestamp) as day,
+                    COUNT(*) as total,
+                    SUM(CASE WHEN success THEN 1 ELSE 0 END) as success_count,
+                    AVG(execution_time_ms) as avg_latency,
+                    SUM(cost_usd) as daily_cost
+                FROM query_logs
+                WHERE {date_filter}
+                GROUP BY DATE(timestamp)
+                ORDER BY day
+            """
+        else:
+            daily_sql = f"""
+                SELECT 
+                    DATE(timestamp) as day,
+                    COUNT(*) as total,
+                    SUM(CASE WHEN success = 1 THEN 1 ELSE 0 END) as success_count,
+                    AVG(execution_time_ms) as avg_latency,
+                    SUM(cost_usd) as daily_cost
+                FROM query_logs
+                WHERE {date_filter}
+                GROUP BY DATE(timestamp)
+                ORDER BY day
+            """
+        daily = conn.execute(text(daily_sql)).fetchall()
 
-        # Types de graphiques les plus utilisés
-        charts = conn.execute(text("""
+        charts = conn.execute(text(f"""
             SELECT chart_type, COUNT(*) as count
             FROM query_logs
-            WHERE chart_type IS NOT NULL
-            AND timestamp > NOW() - INTERVAL ':days days'
+            WHERE chart_type IS NOT NULL AND {date_filter}
             GROUP BY chart_type
             ORDER BY count DESC
-        """).bindparams(days=days)).fetchall()
+        """)).fetchall()
 
-        # Utilisateurs actifs
-        active_users = conn.execute(text("""
+        active_users = conn.execute(text(f"""
             SELECT username, COUNT(*) as queries, SUM(cost_usd) as cost
             FROM query_logs
-            WHERE timestamp > NOW() - INTERVAL ':days days'
+            WHERE {date_filter}
             GROUP BY username
             ORDER BY queries DESC
-        """).bindparams(days=days)).fetchall()
+        """)).fetchall()
 
     success_rate = (success / total * 100) if total > 0 else 0
-    error_rate = 100 - success_rate
 
     return {
         "period_days": days,
         "total_queries": total,
         "success_rate": round(success_rate, 1),
-        "error_rate": round(error_rate, 1),
+        "error_rate": round(100 - success_rate, 1),
         "avg_latency_ms": round(avg_latency, 0),
         "total_cost_usd": round(total_cost, 4),
         "top_questions": [{"question": r[0], "count": r[1]} for r in top_questions],
@@ -99,12 +109,11 @@ def get_dashboard_metrics(days: int = 7) -> dict:
             {"username": r[0], "queries": r[1], "cost": round(r[2] or 0, 4)}
             for r in active_users
         ],
-        "alerts": _check_alerts(error_rate, avg_latency, total_cost)
+        "alerts": _check_alerts(100 - success_rate, avg_latency, total_cost)
     }
 
 
-def _check_alerts(error_rate: float, avg_latency: float, total_cost: float) -> list:
-    """Génère des alertes automatiques si les seuils sont dépassés."""
+def _check_alerts(error_rate, avg_latency, total_cost) -> list:
     alerts = []
     if error_rate > 10:
         alerts.append({
