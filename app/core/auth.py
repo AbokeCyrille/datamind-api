@@ -62,6 +62,20 @@ FAKE_USERS_DB = {
 
 
 def authenticate_user(username: str, password: str) -> Optional[dict]:
+    """
+    Vérifie les credentials.
+    Essaie d'abord la BDD, puis fallback sur FAKE_USERS_DB pour le dev.
+    """
+    # Essaie la vraie BDD
+    try:
+        from app.services.user_manager import authenticate_user_db
+        user = authenticate_user_db(username, password)
+        if user:
+            return user
+    except Exception:
+        pass
+
+    # Fallback : users en mémoire (dev local sans BDD users)
     user = FAKE_USERS_DB.get(username)
     if not user:
         return None

@@ -13,6 +13,7 @@ from app.api.routes.health import router as health_router
 from app.api.routes.auth import router as auth_router
 from app.api.routes.query import router as query_router
 from app.api.routes.admin import router as admin_router
+from app.api.routes.users import router as users_router
 
 settings = get_settings()
 limiter = Limiter(key_func=get_remote_address)
@@ -39,7 +40,7 @@ app.add_middleware(
 @app.on_event("startup")
 async def startup_event():
     """Configure DATABASE_URL puis initialise les tables."""
-    
+
     # 1. Corrige l'URL PostgreSQL
     database_url = os.getenv("DATABASE_URL", "")
     if database_url.startswith("postgres://"):
@@ -47,7 +48,7 @@ async def startup_event():
         os.environ["DATABASE_URL"] = database_url
     print(f"[startup] DATABASE_URL : {database_url[:30]}...")
 
-    # 2. Initialise la table de logs
+    # 2. Logs
     from app.services.query_logger import init_logs_table
     try:
         init_logs_table()
@@ -55,13 +56,22 @@ async def startup_event():
     except Exception as e:
         print(f"[startup] Erreur init logs: {e}")
 
-    # 3. Initialise le cache sémantique
+    # 3. Cache sémantique
     try:
         init_cache_table()
         print("[startup] Table query_cache initialisée")
     except Exception as e:
         print(f"[startup] Erreur init cache: {e}")
+
+    # 4. Users
+    from app.services.user_manager import init_users_table
+    try:
+        init_users_table()
+        print("[startup] Table users initialisée")
+    except Exception as e:
+        print(f"[startup] Erreur init users: {e}")
         
+
 @app.middleware("http")
 async def add_process_time_header(request: Request, call_next):
     start = time.perf_counter()
@@ -87,6 +97,7 @@ app.include_router(health_router)
 app.include_router(auth_router)
 app.include_router(query_router)
 app.include_router(admin_router)
+app.include_router(users_router)
 
 @app.get("/", tags=["Root"])
 async def root():
