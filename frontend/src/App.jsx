@@ -56,8 +56,7 @@ export default function App() {
       overflow: 'hidden', background: 'var(--bg-void)'
     }}>
 
-      {/* ── SIDEBAR ── */}
-      {/* Overlay mobile uniquement */}
+      {/* ── OVERLAY MOBILE ── */}
       {isMobile && sidebarOpen && (
         <div
           onClick={() => setSidebarOpen(false)}
@@ -69,17 +68,15 @@ export default function App() {
         />
       )}
 
-      {/* Sidebar : statique sur desktop, overlay sur mobile */}
+      {/* ── SIDEBAR ── */}
       <div style={{
         width: 240, flexShrink: 0,
-        // Mobile : position fixed, slide in/out
         ...(isMobile ? {
           position: 'fixed', top: 0, left: 0,
           height: '100dvh', zIndex: 100,
           transform: sidebarOpen ? 'translateX(0)' : 'translateX(-100%)',
           transition: 'transform 0.25s ease'
         } : {
-          // Desktop : fait partie du flux normal
           position: 'relative',
           height: '100dvh'
         })
@@ -97,7 +94,7 @@ export default function App() {
         flex: 1, display: 'flex',
         flexDirection: 'column',
         overflow: 'hidden',
-        minWidth: 0  // important pour flex
+        minWidth: 0
       }}>
 
         {/* Topbar */}
@@ -120,7 +117,7 @@ export default function App() {
                   display: 'flex', flexDirection: 'column', gap: 4
                 }}
               >
-                {[0,1,2].map(i => (
+                {[0, 1, 2].map(i => (
                   <span key={i} style={{
                     display: 'block', width: 20, height: 2,
                     background: 'var(--gold)', borderRadius: 1
@@ -134,13 +131,15 @@ export default function App() {
                 color: 'var(--text-primary)',
                 fontFamily: 'var(--font-display)'
               }}>
-                {isMobile ? 'DataMind' : 'Analyse de données'}
+                {showAdmin ? 'Administration' : (isMobile ? 'DataMind' : 'Analyse de données')}
               </div>
               <div style={{
                 fontFamily: 'var(--font-mono)', fontSize: 9,
                 color: 'var(--text-muted)', marginTop: 1
               }}>
-                {history.length} requête{history.length !== 1 ? 's' : ''} · Session active
+                {showAdmin
+                  ? 'Console Oramiz'
+                  : `${history.length} requête${history.length !== 1 ? 's' : ''} · Session active`}
               </div>
             </div>
           </div>
@@ -163,21 +162,24 @@ export default function App() {
               {!isMobile && 'LIVE'}
             </div>
 
-            {/* Bouton Admin */}
+            {/* Bouton Admin — icône SVG */}
             {localStorage.getItem('dm_role') === 'admin' && (
               <button
                 onClick={() => setShowAdmin(s => !s)}
                 style={{
-                  background: showAdmin
-                    ? 'rgba(212,168,67,0.2)'
-                    : 'rgba(212,168,67,0.08)',
+                  display: 'flex', alignItems: 'center', gap: 6,
+                  background: showAdmin ? 'rgba(212,168,67,0.2)' : 'rgba(212,168,67,0.08)',
                   border: '1px solid var(--border-gold)',
                   color: 'var(--gold)', borderRadius: 8,
                   padding: '5px 12px', cursor: 'pointer',
                   fontFamily: 'var(--font-mono)', fontSize: 11
                 }}
               >
-                {showAdmin ? '← Retour' : '⚙ Admin'}
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="12" cy="12" r="3" />
+                  <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+                </svg>
+                {showAdmin ? 'Retour' : 'Admin'}
               </button>
             )}
 
@@ -205,7 +207,7 @@ export default function App() {
           margin: '0 auto', boxSizing: 'border-box'
         }}>
           {showAdmin ? (
-            <AdminDashboard onBack={() => setShowAdmin(false)} />
+            <AdminDashboard />
           ) : (
             <>
               <div ref={topRef} />
@@ -219,7 +221,7 @@ export default function App() {
                   borderRadius: 10, padding: '12px 16px', marginBottom: 16
                 }}>
                   <div style={{ display: 'flex', gap: 5 }}>
-                    {[0,1,2].map(i => (
+                    {[0, 1, 2].map(i => (
                       <span key={i} style={{
                         width: 7, height: 7, borderRadius: '50%',
                         background: 'var(--gold)',
@@ -246,8 +248,7 @@ export default function App() {
                   fontFamily: 'var(--font-mono)', fontSize: 12,
                   color: '#ff8899', marginBottom: 12
                 }}>
-                  <span style={{ color: '#ff4466', marginRight: 8 }}>⚠</span>
-                  {error}
+                  ⚠ {error}
                 </div>
               )}
 
@@ -268,12 +269,12 @@ export default function App() {
                   <svg style={{ width: 64, height: 64, margin: '0 auto 20px', display: 'block' }}
                     viewBox="0 0 80 80" fill="none">
                     <rect x="1" y="1" width="78" height="78" rx="16"
-                      stroke="rgba(212,168,67,0.3)" strokeWidth="1"/>
+                      stroke="rgba(212,168,67,0.3)" strokeWidth="1" />
                     <path d="M20 40 L30 28 L45 52 L55 40"
                       stroke="#d4a843" strokeWidth="2"
-                      strokeLinecap="round" strokeLinejoin="round" fill="none"/>
-                    <circle cx="20" cy="40" r="3" fill="#d4a843"/>
-                    <circle cx="55" cy="40" r="3" fill="#d4a843"/>
+                      strokeLinecap="round" strokeLinejoin="round" fill="none" />
+                    <circle cx="20" cy="40" r="3" fill="#d4a843" />
+                    <circle cx="55" cy="40" r="3" fill="#d4a843" />
                   </svg>
                   <h2 style={{
                     fontFamily: 'var(--font-display)', fontWeight: 800,

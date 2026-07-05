@@ -109,12 +109,18 @@ def get_dashboard_metrics(days: int = 7) -> dict:
             {"username": r[0], "queries": r[1], "cost": round(r[2] or 0, 4)}
             for r in active_users
         ],
-        "alerts": _check_alerts(100 - success_rate, avg_latency, total_cost)
+        "alerts": _check_alerts(100 - success_rate, avg_latency, total_cost, total)
     }
 
 
-def _check_alerts(error_rate, avg_latency, total_cost) -> list:
+def _check_alerts(error_rate, avg_latency, total_cost, total_queries=0) -> list:
+    """Alertes automatiques — jamais d'alerte sans activité."""
     alerts = []
+    
+    # 0 requête ≠ 100% d'erreur — pas d'alerte sur du vide
+    if total_queries == 0:
+        return alerts
+    
     if error_rate > 10:
         alerts.append({
             "level": "critical",
@@ -131,6 +137,6 @@ def _check_alerts(error_rate, avg_latency, total_cost) -> list:
         alerts.append({
             "level": "warning",
             "message": f"Coût API élevé : ${total_cost:.2f}",
-            "action": "Activer le cache sémantique"
+            "action": "Vérifier le cache sémantique"
         })
     return alerts
