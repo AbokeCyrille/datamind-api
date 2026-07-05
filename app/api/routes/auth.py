@@ -21,8 +21,12 @@ async def login(credentials: LoginRequest):
         )
 
     token = create_access_token(
-        data={"sub": user["username"], "role": user["role"]},
-        expires_delta=timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
+    data={
+        "sub": user["username"],
+        "role": user["role"],
+        "tenant_id": user.get("tenant_id", "default")  # ← AJOUT
+    },
+    expires_delta=timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
     )
 
     return TokenResponse(

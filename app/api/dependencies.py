@@ -35,14 +35,18 @@ async def get_current_user(
             detail="Token mal formé"
         )
 
-    return {"username": username, "role": payload.get("role", "user")}
+    return {
+    "username": username,
+    "role": payload.get("role", "user"),
+    "tenant_id": payload.get("tenant_id", "default")  # ← AJOUT
+            }
 
 
 async def require_admin(
     current_user: dict = Depends(get_current_user)
 ) -> dict:
-    """Dépendance pour les routes réservées aux admins."""
-    if current_user["role"] != "admin":
+    """Dépendance pour les routes réservées aux admins et superadmins."""
+    if current_user["role"] not in ["admin", "superadmin"]:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Accès réservé aux administrateurs"

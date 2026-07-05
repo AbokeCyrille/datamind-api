@@ -9,6 +9,7 @@ from app.services.visualizer import generate_visual_from_config
 from app.services.query_logger import log_query
 from app.services.semantic_cache import get_from_cache, save_to_cache
 from app.services.sql_evaluator import evaluate_sql_quality
+from app.services.tenant_manager import get_tenant_database_url
 import time
 
 router = APIRouter(prefix="/query", tags=["Requêtes"])
@@ -20,6 +21,7 @@ async def query(
     current_user: dict = Depends(get_current_user)
 ):
     start = time.perf_counter()
+    tenant_db_url = get_tenant_database_url(current_user.get("tenant_id"))
     sql = None
     chart_type = None
 
@@ -55,7 +57,7 @@ async def query(
             )
 
         # ── Étape 1 : Schéma intelligent ──────────────────────────────────
-        schema = get_smart_schema(request.question)
+        schema = get_smart_schema(request.question, database_url=tenant_db_url)
 
         # ── Étape 2 : Génération SQL + config ─────────────────────────────
         config     = generate_sql_and_config(request.question, schema)
@@ -66,7 +68,7 @@ async def query(
         color_col  = config.get("color_col")
 
         # ── Étape 3 : Exécution SQL ────────────────────────────────────────
-        data = execute_query(sql)
+        data = execute_query(sql, database_url=tenant_db_url)
 
         # ── Étape 4 : Évaluation qualité SQL (LLMOps) ─────────────────────
         quality = evaluate_sql_quality(request.question, sql, data, schema)
