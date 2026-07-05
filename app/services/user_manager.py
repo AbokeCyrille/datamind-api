@@ -88,7 +88,7 @@ def authenticate_user_db(username: str, password: str) -> Optional[dict]:
 
     if not row:
         return None
-    if not row[4]:  # is_active
+    if not row[5]:  # is_active
         return None
     if not verify_password(password, row[2]):
         return None

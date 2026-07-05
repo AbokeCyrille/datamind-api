@@ -8,11 +8,13 @@ def get_dashboard_metrics(days: int = 7) -> dict:
     url = os.getenv("DATABASE_URL", "")
     is_postgres = "postgresql" in url or "postgres" in url
 
-    # Filtre de date compatible SQLite et PostgreSQL
+    # Filtres adaptés au dialecte — dates ET booléens
     if is_postgres:
-        date_filter = f"timestamp > NOW() - INTERVAL '{days} days'"
+        date_filter    = f"timestamp > NOW() - INTERVAL '{days} days'"
+        success_filter = "success = TRUE"
     else:
-        date_filter = f"timestamp > datetime('now', '-{days} days')"
+        date_filter    = f"timestamp > datetime('now', '-{days} days')"
+        success_filter = "success = 1"
 
     with engine.connect() as conn:
 
@@ -21,11 +23,13 @@ def get_dashboard_metrics(days: int = 7) -> dict:
         )).scalar() or 0
 
         success = conn.execute(text(
-            f"SELECT COUNT(*) FROM query_logs WHERE success = 1 AND {date_filter}"
+            f"SELECT COUNT(*) FROM query_logs "
+            f"WHERE {success_filter} AND {date_filter}"
         )).scalar() or 0
 
         avg_latency = conn.execute(text(
-            f"SELECT AVG(execution_time_ms) FROM query_logs WHERE success = 1 AND {date_filter}"
+            f"SELECT AVG(execution_time_ms) FROM query_logs "
+            f"WHERE {success_filter} AND {date_filter}"
         )).scalar() or 0
 
         total_cost = conn.execute(text(
@@ -41,33 +45,20 @@ def get_dashboard_metrics(days: int = 7) -> dict:
             LIMIT 5
         """)).fetchall()
 
-        if is_postgres:
-            daily_sql = f"""
-                SELECT 
-                    DATE(timestamp) as day,
-                    COUNT(*) as total,
-                    SUM(CASE WHEN success THEN 1 ELSE 0 END) as success_count,
-                    AVG(execution_time_ms) as avg_latency,
-                    SUM(cost_usd) as daily_cost
-                FROM query_logs
-                WHERE {date_filter}
-                GROUP BY DATE(timestamp)
-                ORDER BY day
-            """
-        else:
-            daily_sql = f"""
-                SELECT 
-                    DATE(timestamp) as day,
-                    COUNT(*) as total,
-                    SUM(CASE WHEN success = 1 THEN 1 ELSE 0 END) as success_count,
-                    AVG(execution_time_ms) as avg_latency,
-                    SUM(cost_usd) as daily_cost
-                FROM query_logs
-                WHERE {date_filter}
-                GROUP BY DATE(timestamp)
-                ORDER BY day
-            """
-        daily = conn.execute(text(daily_sql)).fetchall()
+        # Le success_filter unifie aussi le CASE WHEN — plus besoin
+        # de deux branches séparées comme avant
+        daily = conn.execute(text(f"""
+            SELECT
+                DATE(timestamp) as day,
+                COUNT(*) as total,
+                SUM(CASE WHEN {success_filter} THEN 1 ELSE 0 END) as success_count,
+                AVG(execution_time_ms) as avg_latency,
+                SUM(cost_usd) as daily_cost
+            FROM query_logs
+            WHERE {date_filter}
+            GROUP BY DATE(timestamp)
+            ORDER BY day
+        """)).fetchall()
 
         charts = conn.execute(text(f"""
             SELECT chart_type, COUNT(*) as count
@@ -116,11 +107,8 @@ def get_dashboard_metrics(days: int = 7) -> dict:
 def _check_alerts(error_rate, avg_latency, total_cost, total_queries=0) -> list:
     """Alertes automatiques — jamais d'alerte sans activité."""
     alerts = []
-    
-    # 0 requête ≠ 100% d'erreur — pas d'alerte sur du vide
     if total_queries == 0:
         return alerts
-    
     if error_rate > 10:
         alerts.append({
             "level": "critical",
