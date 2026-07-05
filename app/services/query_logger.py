@@ -14,13 +14,25 @@ def get_engine():
 
 
 def init_logs_table():
-    """Crée la table de logs si elle n'existe pas."""
+    """Crée la table de logs — compatible SQLite et PostgreSQL."""
     engine = get_engine()
+    url = os.getenv("DATABASE_URL", settings.DATABASE_URL)
+    
+    # Détecte le type de BDD
+    is_postgres = "postgresql" in url or "postgres" in url
+    
+    if is_postgres:
+        id_col = "id SERIAL PRIMARY KEY"
+        ts_col = "timestamp TIMESTAMPTZ DEFAULT NOW()"
+    else:
+        id_col = "id INTEGER PRIMARY KEY AUTOINCREMENT"
+        ts_col = "timestamp TEXT DEFAULT (datetime('now'))"
+
     with engine.connect() as conn:
-        conn.execute(text("""
+        conn.execute(text(f"""
             CREATE TABLE IF NOT EXISTS query_logs (
-                id SERIAL PRIMARY KEY,
-                timestamp TIMESTAMPTZ DEFAULT NOW(),
+                {id_col},
+                {ts_col},
                 username VARCHAR(100),
                 question TEXT,
                 sql_generated TEXT,
@@ -36,7 +48,6 @@ def init_logs_table():
             )
         """))
         conn.commit()
-
 
 def log_query(
     username: str,

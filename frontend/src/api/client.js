@@ -30,5 +30,13 @@ api.interceptors.response.use(
 export const login  = (u, p) => api.post('/auth/login', { username: u, password: p })
 export const query  = (q, v) => api.post('/query', { question: q, generate_visual: v })
 export const health = ()      => api.get('/health')
+// ── Gestion des entreprises (tenants) ──
+export const getTenants   = ()     => api.get('/tenants')
+export const createTenant = (data) => api.post('/tenants', data)
+
+// ── Gestion des utilisateurs ──
+export const getUsers   = ()         => api.get('/users')
+export const createUser = (data)     => api.post('/users', data)
+export const toggleUser = (username) => api.patch(`/users/${username}/toggle`)
 
 export default api

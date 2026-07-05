@@ -14,6 +14,9 @@ class Settings(BaseSettings):
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60
 
+    # ── Chiffrement des credentials clients (Fernet) ─────────
+    ENCRYPTION_KEY: str = ""
+
     # ── Claude API ───────────────────────────────────────────
     ANTHROPIC_API_KEY: str = ""
     CLAUDE_MODEL: str = "claude-sonnet-4-5"
