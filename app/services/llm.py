@@ -39,8 +39,8 @@ Question : {question}"""
 
 def generate_sql_and_config(question: str, schema: str) -> dict:
     """
-    Appelle Claude et retourne SQL + config graphique.
-    Claude décide lui-même du meilleur graphique.
+    Appelle Claude et retourne SQL + config graphique + tokens consommés.
+    Les clés _tokens_in / _tokens_out alimentent le FinOps.
     """
     prompt = build_prompt(question, schema)
 
@@ -56,17 +56,19 @@ def generate_sql_and_config(question: str, schema: str) -> dict:
     raw = re.sub(r"```json\s*", "", raw)
     raw = re.sub(r"```\s*", "", raw).strip()
 
+    # Tokens réels — capturés AVANT le try, comptés même si le JSON échoue
+    tokens_in  = message.usage.input_tokens
+    tokens_out = message.usage.output_tokens
+
     try:
         config = json.loads(raw)
-        # Valide que le SQL est présent
         if "sql" not in config:
             raise ValueError("Pas de SQL dans la réponse")
-        return config
     except json.JSONDecodeError:
-        # Fallback : essaie d'extraire le SQL manuellement
+        # Fallback : extraction manuelle du SQL
         sql_match = re.search(r'SELECT.*?;', raw, re.DOTALL | re.IGNORECASE)
         sql = sql_match.group(0) if sql_match else raw
-        return {
+        config = {
             "sql": sql,
             "chart_type": "bar",
             "x_col": None,
@@ -74,15 +76,22 @@ def generate_sql_and_config(question: str, schema: str) -> dict:
             "color_col": None
         }
 
+    config["_tokens_in"]  = tokens_in
+    config["_tokens_out"] = tokens_out
+    return config
+
 
 def generate_natural_answer(
     question: str,
     sql: str,
     data: list[dict]
-) -> str:
-    """Formule une réponse en langage naturel depuis les données."""
+) -> tuple[str, int, int]:
+    """
+    Formule une réponse en langage naturel.
+    Retourne (texte, tokens_input, tokens_output) pour le FinOps.
+    """
     if not data:
-        return "Aucun résultat trouvé pour cette question."
+        return ("Aucun résultat trouvé pour cette question.", 0, 0)
 
     data_preview = data[:50]
 
@@ -99,4 +108,8 @@ Maximum 5 phrases."""
         max_tokens=500,
         messages=[{"role": "user", "content": prompt}]
     )
-    return message.content[0].text.strip()
+    return (
+        message.content[0].text.strip(),
+        message.usage.input_tokens,
+        message.usage.output_tokens
+    )

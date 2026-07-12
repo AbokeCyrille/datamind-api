@@ -38,6 +38,7 @@ async def query(
                 execution_time_ms=execution_time,
                 rows_returned=len(cached["data"]),
                 chart_type=cached["chart_type"]
+                # Pas de tokens : le cache ne coûte rien — c'est le but
             )
             visual = None
             if request.generate_visual and cached["data"]:
@@ -56,18 +57,20 @@ async def query(
                 execution_time_ms=round(execution_time, 2)
             )
 
-        # ── Étape 1 : Schéma intelligent ──────────────────────────────────
+        # ── Étape 1 : Schéma intelligent (BDD du tenant) ──────────────────
         schema = get_smart_schema(request.question, database_url=tenant_db_url)
 
-        # ── Étape 2 : Génération SQL + config ─────────────────────────────
+        # ── Étape 2 : Génération SQL + config + tokens FinOps ─────────────
         config     = generate_sql_and_config(request.question, schema)
+        tok_in     = config.pop("_tokens_in", 0)
+        tok_out    = config.pop("_tokens_out", 0)
         sql        = config["sql"]
         chart_type = config.get("chart_type", "bar")
         x_col      = config.get("x_col")
         y_col      = config.get("y_col")
         color_col  = config.get("color_col")
 
-        # ── Étape 3 : Exécution SQL ────────────────────────────────────────
+        # ── Étape 3 : Exécution SQL (BDD du tenant) ───────────────────────
         data = execute_query(sql, database_url=tenant_db_url)
 
         # ── Étape 4 : Évaluation qualité SQL (LLMOps) ─────────────────────
@@ -75,8 +78,8 @@ async def query(
         print(f"[eval] Score qualité SQL : {quality['score']}/100 "
               f"({quality['quality']}) — {quality['issues']}")
 
-        # ── Étape 5 : Réponse naturelle ───────────────────────────────────
-        answer = generate_natural_answer(request.question, sql, data)
+        # ── Étape 5 : Réponse naturelle + tokens FinOps ───────────────────
+        answer, a_in, a_out = generate_natural_answer(request.question, sql, data)
 
         # ── Étape 6 : Graphique ───────────────────────────────────────────
         visual = None
@@ -93,13 +96,15 @@ async def query(
         if quality["score"] >= 70:
             save_to_cache(request.question, sql, answer, data, chart_type)
 
-        # ── Étape 8 : Logging MLOps ───────────────────────────────────────
+        # ── Étape 8 : Logging MLOps + FinOps ──────────────────────────────
         log_query(
             username=current_user["username"],
             question=request.question,
             sql_generated=sql,
             success=True,
             execution_time_ms=execution_time,
+            tokens_input=tok_in + a_in,
+            tokens_output=tok_out + a_out,
             rows_returned=len(data),
             chart_type=chart_type
         )
